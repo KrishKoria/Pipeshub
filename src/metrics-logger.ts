@@ -7,6 +7,15 @@ import {
   CSV_HEADERS,
   ORDER_CLEANUP_TIMEOUT,
 } from './constants';
+import {
+  getResponseTypeText,
+  formatTimestamp,
+  logError,
+  logWarning,
+  calculateAge,
+  safeParseInt,
+  safeParseNumber,
+} from './utils';
 
 export class MetricsLogger {
   private sentOrders: Map<number, number> = new Map();
@@ -63,7 +72,7 @@ export class MetricsLogger {
       this.initializeMetricsFile();
       this.initializeResponseFile();
     } catch (error) {
-      console.error('Failed to initialize logging:', error);
+      logError('Failed to initialize logging', error);
       throw new Error(`Logging initialization failed: ${error}`);
     }
   }
@@ -78,29 +87,25 @@ export class MetricsLogger {
       fs.writeFileSync(this.responseFile, CSV_HEADERS.RESPONSES, 'utf-8');
     }
   }
-
   private logMetrics(metrics: OrderMetrics): void {
     try {
-      const logLine = `${new Date(metrics.timestamp).toISOString()},${metrics.orderId},${metrics.responseType},${metrics.roundTripLatency}\n`;
+      const logLine = `${formatTimestamp(metrics.timestamp)},${metrics.orderId},${metrics.responseType},${metrics.roundTripLatency}\n`;
       fs.appendFileSync(this.metricsFile, logLine, 'utf-8');
     } catch (error) {
-      console.error('Failed to log metrics:', error);
+      logError('Failed to log metrics', error);
     }
   }
-
   private logResponse(
     response: OrderResponse,
     timestamp: number,
     latency: number
   ): void {
     try {
-      const responseTypeText = this.getResponseTypeText(
-        response.m_responseType
-      );
-      const logLine = `${new Date(timestamp).toISOString()},${response.m_orderId},${response.m_responseType},${latency},${responseTypeText}\n`;
+      const responseTypeText = getResponseTypeText(response.m_responseType);
+      const logLine = `${formatTimestamp(timestamp)},${response.m_orderId},${response.m_responseType},${latency},${responseTypeText}\n`;
       fs.appendFileSync(this.responseFile, logLine, 'utf-8');
     } catch (error) {
-      console.error('Failed to log response:', error);
+      logError('Failed to log response', error);
     }
   }
   private logUnmatchedResponse(
@@ -109,34 +114,19 @@ export class MetricsLogger {
   ): void {
     try {
       const warningFile = path.join(this.logDirectory, LOG_FILES.UNMATCHED);
-      const responseTypeText = this.getResponseTypeText(
-        response.m_responseType
-      );
-      const logLine = `${new Date(timestamp).toISOString()},UNMATCHED,${response.m_orderId},${response.m_responseType},${responseTypeText}\n`;
+      const responseTypeText = getResponseTypeText(response.m_responseType);
+      const logLine = `${formatTimestamp(timestamp)},UNMATCHED,${response.m_orderId},${response.m_responseType},${responseTypeText}\n`;
 
       if (!fs.existsSync(warningFile)) {
         fs.writeFileSync(warningFile, CSV_HEADERS.UNMATCHED, 'utf-8');
       }
 
       fs.appendFileSync(warningFile, logLine, 'utf-8');
-      console.warn(`Unmatched response for order ${response.m_orderId}`);
+      logWarning('Unmatched response', `for order ${response.m_orderId}`);
     } catch (error) {
-      console.error('Failed to log unmatched response:', error);
+      logError('Failed to log unmatched response', error);
     }
   }
-
-  private getResponseTypeText(responseType: ResponseType): string {
-    switch (responseType) {
-      case ResponseType.Accept:
-        return 'ACCEPT';
-      case ResponseType.Reject:
-        return 'REJECT';
-      case ResponseType.Unknown:
-      default:
-        return 'UNKNOWN';
-    }
-  }
-
   public getTrackingStats(): {
     pendingOrders: number;
     oldestPendingOrder: { orderId: number; ageMs: number } | null;
@@ -145,7 +135,7 @@ export class MetricsLogger {
     let oldestOrder: { orderId: number; ageMs: number } | null = null;
 
     for (const [orderId, sentTimestamp] of this.sentOrders.entries()) {
-      const ageMs = now - sentTimestamp;
+      const ageMs = calculateAge(sentTimestamp, now);
       if (!oldestOrder || ageMs > oldestOrder.ageMs) {
         oldestOrder = { orderId, ageMs };
       }
@@ -161,7 +151,7 @@ export class MetricsLogger {
     let cleanedCount = 0;
 
     for (const [orderId, sentTimestamp] of this.sentOrders.entries()) {
-      if (now - sentTimestamp > maxAgeMs) {
+      if (calculateAge(sentTimestamp, now) > maxAgeMs) {
         this.sentOrders.delete(orderId);
         this.logAbandonedOrder(orderId, sentTimestamp, now);
         cleanedCount++;
@@ -170,7 +160,6 @@ export class MetricsLogger {
 
     return cleanedCount;
   }
-
   private logAbandonedOrder(
     orderId: number,
     sentTimestamp: number,
@@ -178,17 +167,17 @@ export class MetricsLogger {
   ): void {
     try {
       const abandonedFile = path.join(this.logDirectory, LOG_FILES.ABANDONED);
-      const ageMs = cleanupTimestamp - sentTimestamp;
-      const logLine = `${new Date(cleanupTimestamp).toISOString()},${orderId},${sentTimestamp},${ageMs}\n`;
+      const ageMs = calculateAge(sentTimestamp, cleanupTimestamp);
+      const logLine = `${formatTimestamp(cleanupTimestamp)},${orderId},${sentTimestamp},${ageMs}\n`;
 
       if (!fs.existsSync(abandonedFile)) {
         fs.writeFileSync(abandonedFile, CSV_HEADERS.ABANDONED, 'utf-8');
       }
 
       fs.appendFileSync(abandonedFile, logLine, 'utf-8');
-      console.warn(`Abandoned order ${orderId} after ${ageMs}ms`);
+      logWarning('Abandoned order', `${orderId} after ${ageMs}ms`);
     } catch (error) {
-      console.error('Failed to log abandoned order:', error);
+      logError('Failed to log abandoned order', error);
     }
   }
 
@@ -199,7 +188,6 @@ export class MetricsLogger {
   public isOrderTracked(orderId: number): boolean {
     return this.sentOrders.has(orderId);
   }
-
   public async getMetricsForTimeRange(
     startTime: number,
     endTime: number
@@ -218,9 +206,9 @@ export class MetricsLogger {
 
             if (timestamp >= startTime && timestamp <= endTime) {
               metrics.push({
-                orderId: parseInt(orderIdStr!, 10),
-                responseType: parseInt(responseTypeStr!, 10) as ResponseType,
-                roundTripLatency: parseFloat(latencyStr!),
+                orderId: safeParseInt(orderIdStr!, 0),
+                responseType: safeParseInt(responseTypeStr!, 0) as ResponseType,
+                roundTripLatency: safeParseNumber(latencyStr!, 0),
                 timestamp,
               });
             }

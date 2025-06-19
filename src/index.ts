@@ -6,6 +6,7 @@ import {
   ResponseType,
 } from './types';
 import { MILLISECONDS_PER_MINUTE } from './constants';
+import { logError } from './utils';
 
 /**
  * Main entry point for the Order Management System
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
     console.log('✓ System status monitoring');
     console.log('\nCheck the logs/ directory for detailed execution logs.');
   } catch (error) {
-    console.error('Failed to initialize or run system:', error);
+    logError('Failed to initialize or run system', error);
     orderManager.emergencyStop();
     process.exit(1);
   }
@@ -184,7 +185,7 @@ function sleep(ms: number): Promise<void> {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error('Application error:', error);
+    logError('Application error', error);
     process.exit(1);
   });
 }

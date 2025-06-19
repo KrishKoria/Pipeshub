@@ -11,6 +11,7 @@ import {
   SystemStatus,
 } from './types';
 import { SESSION_CHECK_INTERVAL } from './constants';
+import { getResponseTypeText, logError, validateOrderRequest } from './utils';
 
 export class OrderManagement {
   private configManager: ConfigManager;
@@ -64,10 +65,9 @@ export class OrderManagement {
   ): data is OrderRequest {
     return 'm_symbolId' in data && 'm_side' in data;
   }
-
   private processOrderRequest(request: OrderRequest): void {
     try {
-      this.validateOrderRequest(request);
+      validateOrderRequest(request);
 
       if (!this.timeManager.isTradingActive()) {
         this.rejectOrder(
@@ -98,10 +98,9 @@ export class OrderManagement {
   private processOrderResponse(response: OrderResponse): void {
     try {
       const metrics = this.metricsLogger.recordOrderResponse(response);
-
       if (metrics) {
         console.log(
-          `Order ${response.m_orderId} response: ${this.getResponseTypeText(response.m_responseType)} (${metrics.roundTripLatency}ms)`
+          `Order ${response.m_orderId} response: ${getResponseTypeText(response.m_responseType)} (${metrics.roundTripLatency}ms)`
         );
       } else {
         console.warn(
@@ -109,7 +108,7 @@ export class OrderManagement {
         );
       }
     } catch (error) {
-      console.error(`Failed to process order response: ${error}`);
+      logError('Failed to process order response', error);
     }
   }
 
@@ -156,10 +155,9 @@ export class OrderManagement {
         );
         return;
       }
-
       this.send(order);
     } catch (error) {
-      console.error(`Failed to send order ${order.m_orderId}: ${error}`);
+      logError(`Failed to send order ${order.m_orderId}`, error);
     }
   }
   private startSessionManagement(): void {
@@ -182,29 +180,7 @@ export class OrderManagement {
         this.sendLogout();
       }
     } catch (error) {
-      console.error(`Session management error: ${error}`);
-    }
-  }
-
-  private validateOrderRequest(request: OrderRequest): void {
-    if (!request.m_orderId || request.m_orderId <= 0) {
-      throw new Error('Invalid or missing order ID');
-    }
-
-    if (!request.m_symbolId || request.m_symbolId <= 0) {
-      throw new Error('Invalid or missing symbol ID');
-    }
-
-    if (!request.m_price || request.m_price <= 0) {
-      throw new Error('Invalid or missing price');
-    }
-
-    if (!request.m_qty || request.m_qty <= 0) {
-      throw new Error('Invalid or missing quantity');
-    }
-
-    if (request.m_side !== 'B' && request.m_side !== 'S') {
-      throw new Error('Invalid side - must be B (Buy) or S (Sell)');
+      logError('Session management error', error);
     }
   }
 
@@ -212,16 +188,6 @@ export class OrderManagement {
     console.warn(`Order ${request.m_orderId} rejected: ${reason}`);
   }
 
-  private getResponseTypeText(responseType: number): string {
-    switch (responseType) {
-      case 1:
-        return 'ACCEPT';
-      case 2:
-        return 'REJECT';
-      default:
-        return 'UNKNOWN';
-    }
-  }
   public getSystemStatus(): SystemStatus {
     if (!this.isInitialized) {
       return {

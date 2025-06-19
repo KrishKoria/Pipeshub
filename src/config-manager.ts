@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TradingConfig } from './types';
 import { DEFAULT_CONFIG_FILENAME, TIME_FORMAT_REGEX } from './constants';
+import { isValidString, isValidPositiveNumber } from './utils';
 
 export class ConfigManager {
   private config: TradingConfig | null = null;
@@ -37,18 +38,20 @@ export class ConfigManager {
     }
     return this.config;
   }
-
   private validateConfig(config: any): void {
     if (!config.tradingHours) {
       throw new Error('Missing tradingHours');
     }
 
-    if (!config.tradingHours.start || !config.tradingHours.end) {
-      throw new Error('Missing start or end time ');
+    if (
+      !isValidString(config.tradingHours.start) ||
+      !isValidString(config.tradingHours.end)
+    ) {
+      throw new Error('Missing start or end time');
     }
 
-    if (!config.tradingHours.timezone) {
-      throw new Error('Missing timezone ');
+    if (!isValidString(config.tradingHours.timezone)) {
+      throw new Error('Missing timezone');
     }
 
     if (
@@ -64,11 +67,12 @@ export class ConfigManager {
 
     if (
       !config.credentials ||
-      !config.credentials.username ||
-      !config.credentials.password
+      !isValidString(config.credentials.username) ||
+      !isValidString(config.credentials.password)
     ) {
       throw new Error('Missing or invalid credentials');
     }
+
     const timeRegex = TIME_FORMAT_REGEX;
     if (!timeRegex.test(config.tradingHours.start)) {
       throw new Error('Invalid start time format.');
