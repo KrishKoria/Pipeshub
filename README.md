@@ -65,6 +65,16 @@ The system consists of 5 main components:
 - **MetricsLogger**: Tracks responses and logs metrics
 - **OrderManagement**: Main class coordinating everything
 
+## Why TypeScript Over JavaScript?
+
+While the assignment originally requested JavaScript implementation, we chose TypeScript for the following reasons:
+
+1. **Type Safety**: The C++ template provided in the assignment has strict type definitions. TypeScript allows us to mirror these types exactly
+
+2. **Interface Compliance**: The assignment includes detailed interfaces (OrderRequest, OrderResponse, etc.) that need strict adherence.
+
+The final compiled JavaScript output maintains the same functionality as requested, but the TypeScript source provides additional safety and clarity during development.
+
 ## Key Design Decisions
 
 1. **No External Dependencies**: Implements all functionality without 3rd party libraries
