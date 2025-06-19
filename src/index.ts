@@ -8,10 +8,6 @@ import {
 import { MILLISECONDS_PER_MINUTE } from './constants';
 import { logError } from './utils';
 
-/**
- * Main entry point for the Order Management System
- **/
-
 async function main(): Promise<void> {
   console.log('=== Order Management System Demo ===');
   console.log('Initializing system...\n');

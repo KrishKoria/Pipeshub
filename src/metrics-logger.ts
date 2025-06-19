@@ -13,8 +13,6 @@ import {
   logError,
   logWarning,
   calculateAge,
-  safeParseInt,
-  safeParseNumber,
 } from './utils';
 
 export class MetricsLogger {
@@ -179,47 +177,6 @@ export class MetricsLogger {
     } catch (error) {
       logError('Failed to log abandoned order', error);
     }
-  }
-
-  public getPendingOrderIds(): number[] {
-    return Array.from(this.sentOrders.keys());
-  }
-
-  public isOrderTracked(orderId: number): boolean {
-    return this.sentOrders.has(orderId);
-  }
-  public async getMetricsForTimeRange(
-    startTime: number,
-    endTime: number
-  ): Promise<OrderMetrics[]> {
-    return new Promise((resolve, reject) => {
-      try {
-        const metrics: OrderMetrics[] = [];
-        const fileContent = fs.readFileSync(this.metricsFile, 'utf-8');
-        const lines = fileContent.split('\n').slice(1); // Skip header
-
-        for (const line of lines) {
-          if (line.trim()) {
-            const [timestampStr, orderIdStr, responseTypeStr, latencyStr] =
-              line.split(',');
-            const timestamp = new Date(timestampStr!).getTime();
-
-            if (timestamp >= startTime && timestamp <= endTime) {
-              metrics.push({
-                orderId: safeParseInt(orderIdStr!, 0),
-                responseType: safeParseInt(responseTypeStr!, 0) as ResponseType,
-                roundTripLatency: safeParseNumber(latencyStr!, 0),
-                timestamp,
-              });
-            }
-          }
-        }
-
-        resolve(metrics);
-      } catch (error) {
-        reject(new Error(`Failed to read metrics: ${error}`));
-      }
-    });
   }
 
   public close(): void {

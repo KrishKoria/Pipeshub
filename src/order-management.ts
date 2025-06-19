@@ -234,7 +234,7 @@ export class OrderManagement {
     const clearedOrders = this.rateLimiter.clearQueue();
     console.log(`Cleared ${clearedOrders} queued orders`);
 
-    const cleanedTracking = this.metricsLogger.cleanupOldOrders(0); // Clean all
+    const cleanedTracking = this.metricsLogger.cleanupOldOrders(0);
     console.log(`Cleaned up ${cleanedTracking} tracked orders`);
 
     this.shutdown();

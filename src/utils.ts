@@ -1,4 +1,4 @@
-import { ResponseType, RequestType, OrderRequest } from './types';
+import { ResponseType, OrderRequest } from './types';
 
 export function getResponseTypeText(
   responseType: ResponseType | number
@@ -19,27 +19,6 @@ export function getResponseTypeText(
       return 'UNKNOWN';
   }
 }
-export function getRequestTypeText(requestType: RequestType | number): string {
-  const typeValue =
-    typeof requestType === 'number' ? requestType : Number(requestType);
-
-  switch (typeValue) {
-    case RequestType.New:
-    case 1:
-      return 'NEW';
-    case RequestType.Modify:
-    case 2:
-      return 'MODIFY';
-    case RequestType.Cancel:
-    case 3:
-      return 'CANCEL';
-    case RequestType.Unknown:
-    case 0:
-    default:
-      return 'UNKNOWN';
-  }
-}
-
 export function formatTimestamp(timestamp: number): string {
   return new Date(timestamp).toISOString();
 }
@@ -87,30 +66,8 @@ export function safeParseInt(value: string, defaultValue: number = 0): number {
   return isNaN(parsed) ? defaultValue : parsed;
 }
 
-export function createErrorMessage(
-  context: string,
-  originalError: unknown
-): string {
-  return `${context}: ${originalError}`;
-}
-
-export function isValidPositiveNumber(value: unknown): value is number {
-  return typeof value === 'number' && value > 0 && !isNaN(value);
-}
-
 export function isValidString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-export function createCsvLogLine(values: (string | number)[]): string {
-  const escapedValues = values.map((value) => {
-    const stringValue = String(value);
-    if (stringValue.includes(',') || stringValue.includes('"')) {
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
-  });
-  return escapedValues.join(',') + '\n';
 }
 
 export function calculateAge(

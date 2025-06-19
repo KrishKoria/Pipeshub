@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TradingConfig } from './types';
 import { DEFAULT_CONFIG_FILENAME, TIME_FORMAT_REGEX } from './constants';
-import { isValidString, isValidPositiveNumber } from './utils';
+import { isValidString } from './utils';
 
 export class ConfigManager {
   private config: TradingConfig | null = null;

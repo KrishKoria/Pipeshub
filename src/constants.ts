@@ -18,7 +18,6 @@ export const TIMEZONE_OFFSETS = {
 } as const;
 
 export const QUEUE_NOT_FOUND_INDEX = -1;
-export const DEFAULT_RATE_LIMIT = 100;
 
 export const DEFAULT_CONFIG_FILENAME = 'trading-config.json';
 export const DEFAULT_LOG_DIRECTORY = 'logs';
@@ -39,5 +38,3 @@ export const CSV_HEADERS = {
 } as const;
 
 export const TIME_FORMAT_REGEX = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-export const HOURS_PER_DAY = 24;
-export const MINUTES_PER_DAY = HOURS_PER_DAY * MINUTES_PER_HOUR;
