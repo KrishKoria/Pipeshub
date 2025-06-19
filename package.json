@@ -4,14 +4,8 @@
   "description": "A TypeScript-based order management system for exchange trading",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "clean": "rimraf dist",
-    "lint": "eslint src/**/*.ts",
-    "format": "prettier --write src/**/*.ts"
+    "test": "jest"
   },
   "keywords": [
     "order-management",
