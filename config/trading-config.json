@@ -1,0 +1,14 @@
+{
+  "tradingHours": {
+    "start": "10:00",
+    "end": "15:30",
+    "timezone": "Asia/Kolkata"
+  },
+  "rateLimit": {
+    "ordersPerSecond": 100
+  },
+  "credentials": {
+    "username": "trader_001",
+    "password": "secure_password_123"
+  }
+}
