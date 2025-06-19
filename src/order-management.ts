@@ -8,11 +8,10 @@ import {
   RequestType,
   Logon,
   Logout,
+  SystemStatus,
 } from './types';
+import { SESSION_CHECK_INTERVAL } from './constants';
 
-/**
- * OrderManagement - Main class implementing the C++ template interface
- **/
 export class OrderManagement {
   private configManager: ConfigManager;
   private timeManager: TimeManager;
@@ -163,11 +162,10 @@ export class OrderManagement {
       console.error(`Failed to send order ${order.m_orderId}: ${error}`);
     }
   }
-
   private startSessionManagement(): void {
     this.sessionCheckInterval = setInterval(() => {
       this.checkAndUpdateSession();
-    }, 10000);
+    }, SESSION_CHECK_INTERVAL);
 
     this.checkAndUpdateSession();
   }
@@ -224,14 +222,7 @@ export class OrderManagement {
         return 'UNKNOWN';
     }
   }
-
-  public getSystemStatus(): {
-    isInitialized: boolean;
-    isTradingActive: boolean;
-    queueStats: any;
-    trackingStats: any;
-    nextTradingEvent: any;
-  } {
+  public getSystemStatus(): SystemStatus {
     if (!this.isInitialized) {
       return {
         isInitialized: false,

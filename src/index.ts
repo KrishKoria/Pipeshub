@@ -5,6 +5,7 @@ import {
   RequestType,
   ResponseType,
 } from './types';
+import { MILLISECONDS_PER_MINUTE } from './constants';
 
 /**
  * Main entry point for the Order Management System
@@ -67,13 +68,12 @@ function displaySystemStatus(orderManager: OrderManagement): void {
       );
     }
   }
-
   if (status.nextTradingEvent) {
     const eventTime = new Date(
       status.nextTradingEvent.eventTime
     ).toLocaleTimeString();
     const minutesUntil = Math.round(
-      status.nextTradingEvent.timeUntilEvent / 60000
+      status.nextTradingEvent.timeUntilEvent / MILLISECONDS_PER_MINUTE
     );
     console.log(
       `Next Event: ${status.nextTradingEvent.eventType} at ${eventTime} (in ${minutesUntil} minutes)`
@@ -175,7 +175,7 @@ async function demonstrateOrderFlow(
   }
 
   console.log('\nOrder flow demonstration complete!');
-  await sleep(1000); // Allow final processing
+  await sleep(1000);
 }
 
 function sleep(ms: number): Promise<void> {

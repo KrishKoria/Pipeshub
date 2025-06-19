@@ -1,8 +1,12 @@
 import { ConfigManager } from './config-manager';
+import { TimeOfDay } from './types';
+import {
+  TIMEZONE_OFFSETS,
+  MILLISECONDS_PER_HOUR,
+  MILLISECONDS_PER_MINUTE,
+  TIME_FORMAT_REGEX,
+} from './constants';
 
-/**
- * TimeManager handles trading window management and timezone operations
- **/
 export class TimeManager {
   private configManager: ConfigManager;
   private isLoggedIn: boolean = false;
@@ -12,35 +16,49 @@ export class TimeManager {
   }
   public isWithinTradingHours(): boolean {
     const config = this.configManager.getTradingHours();
+    const currentTime = this.getCurrentTimeInTradingTz(config.timezone);
+    const { start, end } = this.getTradingWindow(config);
+
+    return this.isTimeWithinWindow(currentTime, start, end);
+  }
+
+  private getCurrentTimeInTradingTz(timezone: string): TimeOfDay {
     const now = new Date();
+    const tradingTime = this.convertToTradingTimezone(now, timezone);
+    return {
+      hour: tradingTime.getHours(),
+      minute: tradingTime.getMinutes(),
+    };
+  }
 
-    const currentTimeInTradingTz = this.convertToTradingTimezone(
-      now,
-      config.timezone
-    );
+  private getTradingWindow(config: { start: string; end: string }): {
+    start: TimeOfDay;
+    end: TimeOfDay;
+  } {
+    return {
+      start: this.parseTimeString(config.start),
+      end: this.parseTimeString(config.end),
+    };
+  }
 
-    const startTime = this.parseTimeString(config.start);
-    const endTime = this.parseTimeString(config.end);
+  private isTimeWithinWindow(
+    current: TimeOfDay,
+    start: TimeOfDay,
+    end: TimeOfDay
+  ): boolean {
+    const currentMinutes = this.convertToMinutes(current);
+    const startMinutes = this.convertToMinutes(start);
+    const endMinutes = this.convertToMinutes(end);
 
-    const currentHour = currentTimeInTradingTz.getHours();
-    const currentMinute = currentTimeInTradingTz.getMinutes();
-    const currentTimeMinutes = currentHour * 60 + currentMinute;
-
-    const startTimeMinutes = startTime.hour * 60 + startTime.minute;
-    const endTimeMinutes = endTime.hour * 60 + endTime.minute;
-
-    if (startTimeMinutes <= endTimeMinutes) {
-      return (
-        currentTimeMinutes >= startTimeMinutes &&
-        currentTimeMinutes <= endTimeMinutes
-      );
+    if (startMinutes <= endMinutes) {
+      return currentMinutes >= startMinutes && currentMinutes <= endMinutes;
+    } else {
+      return currentMinutes >= startMinutes || currentMinutes <= endMinutes;
     }
+  }
 
-    // Handle overnight trading window (crosses midnight)
-    return (
-      currentTimeMinutes >= startTimeMinutes ||
-      currentTimeMinutes <= endTimeMinutes
-    );
+  private convertToMinutes(time: TimeOfDay): number {
+    return time.hour * 60 + time.minute;
   }
   getTradingSessionState(): {
     isWithinTradingHours: boolean;
@@ -67,97 +85,103 @@ export class TimeManager {
   public isTradingActive(): boolean {
     return this.isLoggedIn && this.isWithinTradingHours();
   }
-
   public getNextTradingEvent(): {
     eventType: 'open' | 'close';
     timeUntilEvent: number;
     eventTime: Date;
   } {
     const config = this.configManager.getTradingHours();
-    const now = new Date();
-    const currentTimeInTz = this.convertToTradingTimezone(now, config.timezone);
+    const currentTimeInTz = this.convertToTradingTimezone(
+      new Date(),
+      config.timezone
+    );
 
+    const { todayStart, todayEnd } = this.getTodayTradingTimes(
+      currentTimeInTz,
+      config
+    );
+
+    if (this.isWithinTradingHours()) {
+      return this.createTradingEvent(
+        'close',
+        todayEnd.getTime() - currentTimeInTz.getTime(),
+        todayEnd
+      );
+    } else {
+      const nextOpen = this.getNextOpenTime(currentTimeInTz, todayStart);
+      return this.createTradingEvent(
+        'open',
+        nextOpen.getTime() - currentTimeInTz.getTime(),
+        nextOpen
+      );
+    }
+  }
+
+  private getTodayTradingTimes(
+    currentTime: Date,
+    config: { start: string; end: string }
+  ): { todayStart: Date; todayEnd: Date } {
     const startTime = this.parseTimeString(config.start);
     const endTime = this.parseTimeString(config.end);
 
-    const todayStart = new Date(currentTimeInTz);
+    const todayStart = new Date(currentTime);
     todayStart.setHours(startTime.hour, startTime.minute, 0, 0);
 
-    const todayEnd = new Date(currentTimeInTz);
+    const todayEnd = new Date(currentTime);
     todayEnd.setHours(endTime.hour, endTime.minute, 0, 0);
 
-    // If end time is before start time, it means trading ends next day
-    if (
-      endTime.hour < startTime.hour ||
-      (endTime.hour === startTime.hour && endTime.minute < startTime.minute)
-    ) {
+    if (this.isEndTimeNextDay(startTime, endTime)) {
       todayEnd.setDate(todayEnd.getDate() + 1);
     }
 
-    const withinTradingHours = this.isWithinTradingHours();
+    return { todayStart, todayEnd };
+  }
 
-    if (withinTradingHours) {
-      return {
-        eventType: 'close',
-        timeUntilEvent: todayEnd.getTime() - currentTimeInTz.getTime(),
-        eventTime: todayEnd,
-      };
-    } else {
-      let nextOpen = todayStart;
+  private isEndTimeNextDay(start: TimeOfDay, end: TimeOfDay): boolean {
+    return (
+      end.hour < start.hour ||
+      (end.hour === start.hour && end.minute < start.minute)
+    );
+  }
 
-      // If today's start time has passed, next open is tomorrow
-      if (currentTimeInTz.getTime() > todayStart.getTime()) {
-        nextOpen = new Date(todayStart);
-        nextOpen.setDate(nextOpen.getDate() + 1);
-      }
-
-      return {
-        eventType: 'open',
-        timeUntilEvent: nextOpen.getTime() - currentTimeInTz.getTime(),
-        eventTime: nextOpen,
-      };
+  private getNextOpenTime(currentTime: Date, todayStart: Date): Date {
+    if (currentTime.getTime() > todayStart.getTime()) {
+      const nextOpen = new Date(todayStart);
+      nextOpen.setDate(nextOpen.getDate() + 1);
+      return nextOpen;
     }
+    return todayStart;
+  }
+
+  private createTradingEvent(
+    eventType: 'open' | 'close',
+    timeUntilEvent: number,
+    eventTime: Date
+  ): { eventType: 'open' | 'close'; timeUntilEvent: number; eventTime: Date } {
+    return { eventType, timeUntilEvent, eventTime };
   }
   private convertToTradingTimezone(date: Date, timezone: string): Date {
-    // For UTC, return the original date without any conversion
     if (timezone === 'UTC') {
       return new Date(date.getTime());
     }
 
-    // Convert to UTC first, then apply target timezone offset
-    const utcTime = date.getTime() + date.getTimezoneOffset() * 60000;
+    const utcTime =
+      date.getTime() + date.getTimezoneOffset() * MILLISECONDS_PER_MINUTE;
+    const offset =
+      TIMEZONE_OFFSETS[timezone as keyof typeof TIMEZONE_OFFSETS] || 0;
 
-    let offset = 0;
-    switch (timezone) {
-      case 'Asia/Kolkata':
-      case 'Asia/Calcutta':
-        offset = 5.5;
-        break;
-      case 'America/New_York':
-        offset = -5;
-        break;
-      case 'Europe/London':
-        offset = 0;
-        break;
-      default:
-        offset = 0;
-        break;
-    }
-
-    return new Date(utcTime + offset * 3600000);
+    return new Date(utcTime + offset * MILLISECONDS_PER_HOUR);
   }
 
-  private parseTimeString(timeString: string): {
-    hour: number;
-    minute: number;
-  } {
-    const [hourStr, minuteStr] = timeString.split(':');
-    if (!hourStr || !minuteStr) {
+  private parseTimeString(timeString: string): TimeOfDay {
+    if (!TIME_FORMAT_REGEX.test(timeString)) {
       throw new Error(`Invalid time format: ${timeString}. Expected HH:MM`);
     }
+
+    const [hourStr, minuteStr] = timeString.split(':');
     return {
-      hour: parseInt(hourStr, 10),
-      minute: parseInt(minuteStr, 10),
+      hour: parseInt(hourStr!, 10),
+      minute: parseInt(minuteStr!, 10),
     };
   }
 

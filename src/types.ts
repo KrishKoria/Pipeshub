@@ -16,7 +16,7 @@ export interface OrderRequest {
   m_side: 'B' | 'S';
   m_orderId: number;
   requestType?: RequestType;
-  timestamp?: number; // Added for latency calculation
+  timestamp?: number;
 }
 
 export enum RequestType {
@@ -35,10 +35,9 @@ export enum ResponseType {
 export interface OrderResponse {
   m_orderId: number;
   m_responseType: ResponseType;
-  timestamp?: number; // Added for latency calculation
+  timestamp?: number;
 }
 
-// Additional types for internal tracking
 export interface QueuedOrder extends OrderRequest {
   queuedAt: number;
   originalTimestamp: number;
@@ -51,11 +50,42 @@ export interface OrderMetrics {
   timestamp: number;
 }
 
+export interface QueueStats {
+  queueLength: number;
+  ordersThisSecond: number;
+  rateLimit: number;
+  remainingCapacity: number;
+}
+
+export interface TrackingStats {
+  pendingOrders: number;
+  oldestPendingOrder: { orderId: number; ageMs: number } | null;
+}
+
+export interface TradingEvent {
+  eventType: 'open' | 'close';
+  timeUntilEvent: number;
+  eventTime: Date;
+}
+
+export interface SystemStatus {
+  isInitialized: boolean;
+  isTradingActive: boolean;
+  queueStats: QueueStats | null;
+  trackingStats: TrackingStats | null;
+  nextTradingEvent: TradingEvent | null;
+}
+
+export interface TimeOfDay {
+  hour: number;
+  minute: number;
+}
+
 export interface TradingConfig {
   tradingHours: {
-    start: string; // Format: "HH:MM"
-    end: string; // Format: "HH:MM"
-    timezone: string; // e.g., "Asia/Kolkata"
+    start: string;
+    end: string;
+    timezone: string;
   };
   rateLimit: {
     ordersPerSecond: number;

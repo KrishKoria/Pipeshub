@@ -63,7 +63,6 @@ describe('RateLimiter', () => {
   });
 
   afterAll(() => {
-    // Ensure all timers are cleared
     jest.clearAllTimers();
   });
 

@@ -1,10 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { OrderResponse, OrderMetrics, ResponseType } from './types';
+import {
+  DEFAULT_LOG_DIRECTORY,
+  LOG_FILES,
+  CSV_HEADERS,
+  ORDER_CLEANUP_TIMEOUT,
+} from './constants';
 
-/**
- * MetricsLogger handles response tracking, latency calculation, and persistent logging
- **/
 export class MetricsLogger {
   private sentOrders: Map<number, number> = new Map();
   private readonly logDirectory: string;
@@ -13,23 +16,18 @@ export class MetricsLogger {
   private logStream: fs.WriteStream | null = null;
 
   constructor(logDirectory?: string) {
-    this.logDirectory = logDirectory || path.join(__dirname, '..', 'logs');
-    this.metricsFile = path.join(this.logDirectory, 'order-metrics.log');
-    this.responseFile = path.join(this.logDirectory, 'order-responses.log');
+    this.logDirectory =
+      logDirectory || path.join(__dirname, '..', DEFAULT_LOG_DIRECTORY);
+    this.metricsFile = path.join(this.logDirectory, LOG_FILES.METRICS);
+    this.responseFile = path.join(this.logDirectory, LOG_FILES.RESPONSES);
     this.initializeLogging();
   }
 
-  /**
-   * Record that an order was sent to exchange
-   **/
   public recordOrderSent(orderId: number, sentTimestamp?: number): void {
     const timestamp = sentTimestamp || Date.now();
     this.sentOrders.set(orderId, timestamp);
   }
 
-  /**
-   * Process order response and calculate metrics
-   **/
   public recordOrderResponse(response: OrderResponse): OrderMetrics | null {
     const receivedTimestamp = response.timestamp || Date.now();
     const sentTimestamp = this.sentOrders.get(response.m_orderId);
@@ -69,19 +67,15 @@ export class MetricsLogger {
       throw new Error(`Logging initialization failed: ${error}`);
     }
   }
-
   private initializeMetricsFile(): void {
     if (!fs.existsSync(this.metricsFile)) {
-      const header = 'timestamp,orderId,responseType,roundTripLatency\n';
-      fs.writeFileSync(this.metricsFile, header, 'utf-8');
+      fs.writeFileSync(this.metricsFile, CSV_HEADERS.METRICS, 'utf-8');
     }
   }
 
   private initializeResponseFile(): void {
     if (!fs.existsSync(this.responseFile)) {
-      const header =
-        'timestamp,orderId,responseType,roundTripLatency,responseTypeText\n';
-      fs.writeFileSync(this.responseFile, header, 'utf-8');
+      fs.writeFileSync(this.responseFile, CSV_HEADERS.RESPONSES, 'utf-8');
     }
   }
 
@@ -109,25 +103,19 @@ export class MetricsLogger {
       console.error('Failed to log response:', error);
     }
   }
-
   private logUnmatchedResponse(
     response: OrderResponse,
     timestamp: number
   ): void {
     try {
-      const warningFile = path.join(
-        this.logDirectory,
-        'unmatched-responses.log'
-      );
+      const warningFile = path.join(this.logDirectory, LOG_FILES.UNMATCHED);
       const responseTypeText = this.getResponseTypeText(
         response.m_responseType
       );
       const logLine = `${new Date(timestamp).toISOString()},UNMATCHED,${response.m_orderId},${response.m_responseType},${responseTypeText}\n`;
 
       if (!fs.existsSync(warningFile)) {
-        const header =
-          'timestamp,status,orderId,responseType,responseTypeText\n';
-        fs.writeFileSync(warningFile, header, 'utf-8');
+        fs.writeFileSync(warningFile, CSV_HEADERS.UNMATCHED, 'utf-8');
       }
 
       fs.appendFileSync(warningFile, logLine, 'utf-8');
@@ -168,11 +156,7 @@ export class MetricsLogger {
       oldestPendingOrder: oldestOrder,
     };
   }
-
-  /**
-   * Clean up old pending orders
-   **/
-  public cleanupOldOrders(maxAgeMs: number = 300000): number {
+  public cleanupOldOrders(maxAgeMs: number = ORDER_CLEANUP_TIMEOUT): number {
     const now = Date.now();
     let cleanedCount = 0;
 
@@ -187,25 +171,18 @@ export class MetricsLogger {
     return cleanedCount;
   }
 
-  /**
-   * Log abandoned orders (orders that never received responses)
-   **/
   private logAbandonedOrder(
     orderId: number,
     sentTimestamp: number,
     cleanupTimestamp: number
   ): void {
     try {
-      const abandonedFile = path.join(
-        this.logDirectory,
-        'abandoned-orders.log'
-      );
+      const abandonedFile = path.join(this.logDirectory, LOG_FILES.ABANDONED);
       const ageMs = cleanupTimestamp - sentTimestamp;
       const logLine = `${new Date(cleanupTimestamp).toISOString()},${orderId},${sentTimestamp},${ageMs}\n`;
 
       if (!fs.existsSync(abandonedFile)) {
-        const header = 'cleanupTimestamp,orderId,sentTimestamp,ageMs\n';
-        fs.writeFileSync(abandonedFile, header, 'utf-8');
+        fs.writeFileSync(abandonedFile, CSV_HEADERS.ABANDONED, 'utf-8');
       }
 
       fs.appendFileSync(abandonedFile, logLine, 'utf-8');
@@ -223,9 +200,6 @@ export class MetricsLogger {
     return this.sentOrders.has(orderId);
   }
 
-  /**
-   * Get metrics for specific time range (read from log files)
-   **/
   public async getMetricsForTimeRange(
     startTime: number,
     endTime: number

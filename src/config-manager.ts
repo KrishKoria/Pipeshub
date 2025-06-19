@@ -1,10 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { TradingConfig } from './types';
-
-/**
- * ConfigManager handles loading and managing trading configuration
- **/
+import { DEFAULT_CONFIG_FILENAME, TIME_FORMAT_REGEX } from './constants';
 
 export class ConfigManager {
   private config: TradingConfig | null = null;
@@ -12,12 +9,9 @@ export class ConfigManager {
 
   constructor(configPath?: string) {
     this.configPath =
-      configPath || path.join(__dirname, '..', 'config', 'trading-config.json');
+      configPath ||
+      path.join(__dirname, '..', 'config', DEFAULT_CONFIG_FILENAME);
   }
-
-  /**
-   * Load configuration from file
-   **/
 
   public loadConfig(): TradingConfig {
     try {
@@ -37,10 +31,6 @@ export class ConfigManager {
     }
   }
 
-  /**
-   * Get current configuration
-   **/
-
   public getConfig(): TradingConfig {
     if (!this.config) {
       throw new Error('Configuration not loaded. Call loadConfig() first.');
@@ -48,28 +38,24 @@ export class ConfigManager {
     return this.config;
   }
 
-  /**
-   * Validate configuration
-   **/
-
   private validateConfig(config: any): void {
     if (!config.tradingHours) {
-      throw new Error('Missing tradingHours in configuration');
+      throw new Error('Missing tradingHours');
     }
 
     if (!config.tradingHours.start || !config.tradingHours.end) {
-      throw new Error('Missing start or end time in tradingHours');
+      throw new Error('Missing start or end time ');
     }
 
     if (!config.tradingHours.timezone) {
-      throw new Error('Missing timezone in tradingHours');
+      throw new Error('Missing timezone ');
     }
 
     if (
       !config.rateLimit ||
       typeof config.rateLimit.ordersPerSecond !== 'number'
     ) {
-      throw new Error('Missing or invalid ordersPerSecond in rateLimit');
+      throw new Error('Missing or invalid ordersPerSecond');
     }
 
     if (config.rateLimit.ordersPerSecond <= 0) {
@@ -83,20 +69,15 @@ export class ConfigManager {
     ) {
       throw new Error('Missing or invalid credentials');
     }
-
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    const timeRegex = TIME_FORMAT_REGEX;
     if (!timeRegex.test(config.tradingHours.start)) {
-      throw new Error('Invalid start time format. Expected HH:MM');
+      throw new Error('Invalid start time format.');
     }
 
     if (!timeRegex.test(config.tradingHours.end)) {
-      throw new Error('Invalid end time format. Expected HH:MM');
+      throw new Error('Invalid end time format.');
     }
   }
-
-  /**
-   * Get specific configuration
-   **/
 
   public getTradingHours() {
     return this.getConfig().tradingHours;

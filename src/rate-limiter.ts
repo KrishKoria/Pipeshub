@@ -1,12 +1,15 @@
 import { ConfigManager } from './config-manager';
 import { OrderRequest, QueuedOrder, RequestType } from './types';
+import {
+  QUEUE_PROCESSOR_INTERVAL,
+  MILLISECONDS_PER_SECOND,
+  QUEUE_NOT_FOUND_INDEX,
+} from './constants';
 
-/**
- * RateLimiter handles order queue management and rate limiting
- **/
 export class RateLimiter {
   private configManager: ConfigManager;
   private orderQueue: QueuedOrder[] = [];
+  private orderIndexMap: Map<number, number> = new Map(); // orderId -> queue index
   private ordersThisSecond: number = 0;
   private currentSecond: number = 0;
   private queueProcessor: NodeJS.Timeout | null = null;
@@ -18,14 +21,10 @@ export class RateLimiter {
   ) {
     this.configManager = configManager;
     this.onSendCallback = onSendCallback;
-    this.currentSecond = Math.floor(Date.now() / 1000);
+    this.currentSecond = Math.floor(Date.now() / MILLISECONDS_PER_SECOND);
     this.startQueueProcessor();
   }
 
-  /**
-   * Process incoming order request with rate limiting and queue management
-   * @returns true if processed immediately, false if queued
-   **/
   public processOrder(request: OrderRequest): boolean {
     const now = Date.now();
     const requestWithTimestamp = {
@@ -46,10 +45,6 @@ export class RateLimiter {
       return false;
     }
   }
-
-  /**
-   * Handle modify and cancel operations on queued orders
-   **/
   private handleQueueOperations(request: OrderRequest): boolean {
     const orderId = request.m_orderId;
 
@@ -66,46 +61,50 @@ export class RateLimiter {
         return false;
     }
   }
-
-  /**
-   * Modify an existing order in the queue
-   **/
   private modifyQueuedOrder(
     orderId: number,
     newPrice: number,
     newQty: number
   ): boolean {
-    const queuedOrderIndex = this.orderQueue.findIndex(
-      (order) => order.m_orderId === orderId
-    );
-
-    if (queuedOrderIndex !== -1) {
-      this.orderQueue[queuedOrderIndex]!.m_price = newPrice;
-      this.orderQueue[queuedOrderIndex]!.m_qty = newQty;
+    const index = this.orderIndexMap.get(orderId);
+    if (index !== undefined && this.orderQueue[index]) {
+      this.orderQueue[index]!.m_price = newPrice;
+      this.orderQueue[index]!.m_qty = newQty;
       return true;
     }
-
     return false;
   }
 
-  /**
-   * Cancel an existing order in the queue
-   **/
   private cancelQueuedOrder(orderId: number): boolean {
-    const queuedOrderIndex = this.orderQueue.findIndex(
-      (order) => order.m_orderId === orderId
-    );
-
-    if (queuedOrderIndex !== -1) {
-      this.orderQueue.splice(queuedOrderIndex, 1);
+    const index = this.orderIndexMap.get(orderId);
+    if (index !== undefined && this.orderQueue[index]) {
+      this.removeOrderFromQueue(index);
       return true;
     }
-
     return false;
   }
 
+  private removeOrderFromQueue(index: number): void {
+    const removedOrder = this.orderQueue[index];
+    if (!removedOrder) return;
+
+    this.orderQueue.splice(index, 1);
+
+    this.orderIndexMap.delete(removedOrder.m_orderId);
+
+    this.updateIndexMapAfterRemoval(index);
+  }
+
+  private updateIndexMapAfterRemoval(removedIndex: number): void {
+    for (let i = removedIndex; i < this.orderQueue.length; i++) {
+      const order = this.orderQueue[i];
+      if (order) {
+        this.orderIndexMap.set(order.m_orderId, i);
+      }
+    }
+  }
   private canSendImmediately(): boolean {
-    const currentSecond = Math.floor(Date.now() / 1000);
+    const currentSecond = Math.floor(Date.now() / MILLISECONDS_PER_SECOND);
     const rateLimit = this.configManager.getRateLimit().ordersPerSecond;
 
     if (currentSecond !== this.currentSecond) {
@@ -116,11 +115,6 @@ export class RateLimiter {
     return this.ordersThisSecond < rateLimit;
   }
 
-  private sendOrderNow(order: OrderRequest): void {
-    this.ordersThisSecond++;
-    this.onSendCallback(order);
-  }
-
   private queueOrder(order: OrderRequest): void {
     const queuedOrder: QueuedOrder = {
       ...order,
@@ -129,15 +123,13 @@ export class RateLimiter {
     };
 
     this.orderQueue.push(queuedOrder);
+    this.orderIndexMap.set(queuedOrder.m_orderId, this.orderQueue.length - 1);
   }
 
-  /**
-   * Start the queue processor that runs every 100ms
-   **/
   private startQueueProcessor(): void {
     this.queueProcessor = setInterval(() => {
       this.processQueue();
-    }, 100);
+    }, QUEUE_PROCESSOR_INTERVAL);
   }
 
   private processQueue(): void {
@@ -145,22 +137,44 @@ export class RateLimiter {
       return;
     }
 
+    let processedCount = 0;
     while (this.orderQueue.length > 0 && this.canSendImmediately()) {
       const order = this.orderQueue.shift();
       if (order) {
-        const orderToSend: OrderRequest = {
-          m_symbolId: order.m_symbolId,
-          m_price: order.m_price,
-          m_qty: order.m_qty,
-          m_side: order.m_side,
-          m_orderId: order.m_orderId,
-          requestType: order.requestType || RequestType.New,
-          timestamp: order.originalTimestamp,
-        };
+        this.orderIndexMap.delete(order.m_orderId);
 
+        this.updateIndexMapAfterShift();
+
+        const orderToSend: OrderRequest = this.createOrderToSend(order);
         this.sendOrderNow(orderToSend);
+        processedCount++;
       }
     }
+  }
+
+  private updateIndexMapAfterShift(): void {
+    for (let i = 0; i < this.orderQueue.length; i++) {
+      const order = this.orderQueue[i];
+      if (order) {
+        this.orderIndexMap.set(order.m_orderId, i);
+      }
+    }
+  }
+  private sendOrderNow(order: OrderRequest): void {
+    this.ordersThisSecond++;
+    this.onSendCallback(order);
+  }
+
+  private createOrderToSend(queuedOrder: QueuedOrder): OrderRequest {
+    return {
+      m_symbolId: queuedOrder.m_symbolId,
+      m_price: queuedOrder.m_price,
+      m_qty: queuedOrder.m_qty,
+      m_side: queuedOrder.m_side,
+      m_orderId: queuedOrder.m_orderId,
+      requestType: queuedOrder.requestType || RequestType.New,
+      timestamp: queuedOrder.originalTimestamp,
+    };
   }
 
   public getQueueStats(): {
@@ -181,28 +195,26 @@ export class RateLimiter {
   public getQueuedOrders(): ReadonlyArray<QueuedOrder> {
     return [...this.orderQueue];
   }
-
   public clearQueue(): number {
     const clearedCount = this.orderQueue.length;
     this.orderQueue = [];
+    this.orderIndexMap.clear();
     return clearedCount;
   }
 
-  /**
-   * Stop the queue processor
-   */
+  public isOrderInQueue(orderId: number): boolean {
+    return this.orderIndexMap.has(orderId);
+  }
+
+  public getOrderQueuePosition(orderId: number): number {
+    const index = this.orderIndexMap.get(orderId);
+    return index !== undefined ? index : QUEUE_NOT_FOUND_INDEX;
+  }
+
   public stop(): void {
     if (this.queueProcessor) {
       clearInterval(this.queueProcessor);
       this.queueProcessor = null;
     }
-  }
-
-  public isOrderInQueue(orderId: number): boolean {
-    return this.orderQueue.some((order) => order.m_orderId === orderId);
-  }
-
-  public getOrderQueuePosition(orderId: number): number {
-    return this.orderQueue.findIndex((order) => order.m_orderId === orderId);
   }
 }
