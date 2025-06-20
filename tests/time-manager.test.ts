@@ -78,7 +78,8 @@ describe('TimeManager', () => {
       const endOfDay = timeManager_any.parseTimeString('23:59');
       expect(endOfDay.hour).toBe(23);
       expect(endOfDay.minute).toBe(59);
-    });    it('should throw error for invalid time format', () => {
+    });
+    it('should throw error for invalid time format', () => {
       const timeManager_any = timeManager as any;
 
       expect(() => {
@@ -86,11 +87,11 @@ describe('TimeManager', () => {
       }).toThrow('Invalid time format');
 
       expect(() => {
-        timeManager_any.parseTimeString('25:00'); // 25:00 is invalid (hours should be 0-23)
+        timeManager_any.parseTimeString('25:00');
       }).toThrow('Invalid time format');
 
       expect(() => {
-        timeManager_any.parseTimeString('12:60'); // 60 minutes is invalid (should be 0-59)
+        timeManager_any.parseTimeString('12:60');
       }).toThrow('Invalid time format');
     });
   });

@@ -9,7 +9,7 @@ import {
 export class RateLimiter {
   private configManager: ConfigManager;
   private orderQueue: QueuedOrder[] = [];
-  private orderIndexMap: Map<number, number> = new Map(); // orderId -> queue index
+  private orderIndexMap: Map<number, number> = new Map();
   private ordersThisSecond: number = 0;
   private currentSecond: number = 0;
   private queueProcessor: NodeJS.Timeout | null = null;

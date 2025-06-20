@@ -40,7 +40,6 @@ export function validateOrderRequest(request: OrderRequest): void {
     throw new Error('Invalid or missing symbol ID');
   }
 
-  // For cancel orders, price and quantity can be 0
   const isCancel = request.requestType === RequestType.Cancel;
 
   if (!isCancel && (!request.m_price || request.m_price <= 0)) {

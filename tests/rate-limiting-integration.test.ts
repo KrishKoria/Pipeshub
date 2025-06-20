@@ -32,7 +32,7 @@ describe('Rate Limiting Integration Tests', () => {
     if (!fs.existsSync(testLogDir)) {
       fs.mkdirSync(testLogDir, { recursive: true });
     }
-    orderManager = new OrderManagement(testConfigPath, testLogDir, true); // Enable quiet mode for tests
+    orderManager = new OrderManagement(testConfigPath, testLogDir, true);
     await orderManager.initialize();
   });
 
@@ -119,7 +119,7 @@ describe('Rate Limiting Integration Tests', () => {
         JSON.stringify(testConfigLowRate, null, 2)
       );
       orderManager.shutdown();
-      orderManager = new OrderManagement(lowRateConfigPath, testLogDir, true); // Enable quiet mode for tests
+      orderManager = new OrderManagement(lowRateConfigPath, testLogDir, true);
       await orderManager.initialize();
 
       const orders: OrderRequest[] = [
