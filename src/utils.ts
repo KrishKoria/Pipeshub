@@ -1,4 +1,4 @@
-import { ResponseType, OrderRequest } from './types';
+import { ResponseType, OrderRequest, RequestType } from './types';
 
 export function getResponseTypeText(
   responseType: ResponseType | number
@@ -40,11 +40,14 @@ export function validateOrderRequest(request: OrderRequest): void {
     throw new Error('Invalid or missing symbol ID');
   }
 
-  if (!request.m_price || request.m_price <= 0) {
+  // For cancel orders, price and quantity can be 0
+  const isCancel = request.requestType === RequestType.Cancel;
+
+  if (!isCancel && (!request.m_price || request.m_price <= 0)) {
     throw new Error('Invalid or missing price');
   }
 
-  if (!request.m_qty || request.m_qty <= 0) {
+  if (!isCancel && (!request.m_qty || request.m_qty <= 0)) {
     throw new Error('Invalid or missing quantity');
   }
 
