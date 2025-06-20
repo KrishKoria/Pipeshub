@@ -20,8 +20,13 @@ export class OrderManagement {
   private metricsLogger: MetricsLogger;
   private isInitialized: boolean = false;
   private sessionCheckInterval: NodeJS.Timeout | null = null;
+  private quietMode: boolean = false;
 
-  constructor(configPath?: string, logDirectory?: string) {
+  constructor(
+    configPath?: string,
+    logDirectory?: string,
+    quietMode: boolean = false
+  ) {
     this.configManager = new ConfigManager(configPath);
     this.timeManager = new TimeManager(this.configManager);
     this.rateLimiter = new RateLimiter(
@@ -29,8 +34,20 @@ export class OrderManagement {
       this.handleSendToExchange.bind(this)
     );
     this.metricsLogger = new MetricsLogger(logDirectory);
+    this.quietMode = quietMode || process.env.NODE_ENV === 'test';
   }
 
+  private log(...args: any[]): void {
+    if (!this.quietMode) {
+      console.log(...args);
+    }
+  }
+
+  private warn(...args: any[]): void {
+    if (!this.quietMode) {
+      console.warn(...args);
+    }
+  }
   public async initialize(): Promise<void> {
     try {
       this.configManager.loadConfig();
@@ -38,7 +55,7 @@ export class OrderManagement {
       this.startSessionManagement();
 
       this.isInitialized = true;
-      console.log('OrderManagement system initialized successfully');
+      this.log('OrderManagement system initialized successfully');
     } catch (error) {
       throw new Error(`Failed to initialize OrderManagement: ${error}`);
     }
@@ -85,11 +102,10 @@ export class OrderManagement {
 
       const wasProcessedImmediately =
         this.rateLimiter.processOrder(timestampedRequest);
-
       if (wasProcessedImmediately) {
-        console.log(`Order ${request.m_orderId} processed immediately`);
+        this.log(`Order ${request.m_orderId} processed immediately`);
       } else {
-        console.log(`Order ${request.m_orderId} queued for rate limiting`);
+        this.log(`Order ${request.m_orderId} queued for rate limiting`);
       }
     } catch (error) {
       this.rejectOrder(request, `Order processing failed: ${error}`);
@@ -99,11 +115,11 @@ export class OrderManagement {
     try {
       const metrics = this.metricsLogger.recordOrderResponse(response);
       if (metrics) {
-        console.log(
+        this.log(
           `Order ${response.m_orderId} response: ${getResponseTypeText(response.m_responseType)} (${metrics.roundTripLatency}ms)`
         );
       } else {
-        console.warn(
+        this.warn(
           `Received unmatched response for order ${response.m_orderId}`
         );
       }
@@ -111,9 +127,8 @@ export class OrderManagement {
       logError('Failed to process order response', error);
     }
   }
-
   public send(request: OrderRequest): void {
-    console.log(
+    this.log(
       `[EXCHANGE] Sending order ${request.m_orderId}: ${request.m_side} ${request.m_qty} @ ${request.m_price}`
     );
     this.metricsLogger.recordOrderSent(request.m_orderId, request.timestamp);
@@ -125,11 +140,10 @@ export class OrderManagement {
       username: credentials.username,
       password: credentials.password,
     };
-
-    console.log(`[EXCHANGE] Sending logon for user: ${logonMessage.username}`);
+    this.log(`[EXCHANGE] Sending logon for user: ${logonMessage.username}`);
 
     this.timeManager.setLoggedIn(true);
-    console.log('Successfully logged in to exchange');
+    this.log('Successfully logged in to exchange');
   }
 
   public sendLogout(): void {
@@ -137,13 +151,10 @@ export class OrderManagement {
     const logoutMessage: Logout = {
       username: credentials.username,
     };
-
-    console.log(
-      `[EXCHANGE] Sending logout for user: ${logoutMessage.username}`
-    );
+    this.log(`[EXCHANGE] Sending logout for user: ${logoutMessage.username}`);
 
     this.timeManager.setLoggedIn(false);
-    console.log('Successfully logged out from exchange');
+    this.log('Successfully logged out from exchange');
   }
 
   private handleSendToExchange(order: OrderRequest): void {
@@ -171,21 +182,19 @@ export class OrderManagement {
   private checkAndUpdateSession(): void {
     try {
       const sessionState = this.timeManager.getTradingSessionState();
-
       if (sessionState.shouldLogon) {
-        console.log('Trading window opened - logging in');
+        this.log('Trading window opened - logging in');
         this.sendLogon();
       } else if (sessionState.shouldLogout) {
-        console.log('Trading window closed - logging out');
+        this.log('Trading window closed - logging out');
         this.sendLogout();
       }
     } catch (error) {
       logError('Session management error', error);
     }
   }
-
   private rejectOrder(request: OrderRequest, reason: string): void {
-    console.warn(`Order ${request.m_orderId} rejected: ${reason}`);
+    this.warn(`Order ${request.m_orderId} rejected: ${reason}`);
   }
 
   public getSystemStatus(): SystemStatus {
@@ -207,9 +216,8 @@ export class OrderManagement {
       nextTradingEvent: this.timeManager.getNextTradingEvent(),
     };
   }
-
   public shutdown(): void {
-    console.log('Shutting down OrderManagement system...');
+    this.log('Shutting down OrderManagement system...');
 
     if (this.sessionCheckInterval) {
       clearInterval(this.sessionCheckInterval);
@@ -225,17 +233,16 @@ export class OrderManagement {
     }
 
     this.isInitialized = false;
-    console.log('OrderManagement system shutdown complete');
+    this.log('OrderManagement system shutdown complete');
   }
-
   public emergencyStop(): void {
-    console.warn('EMERGENCY STOP initiated');
+    this.warn('EMERGENCY STOP initiated');
 
     const clearedOrders = this.rateLimiter.clearQueue();
-    console.log(`Cleared ${clearedOrders} queued orders`);
+    this.log(`Cleared ${clearedOrders} queued orders`);
 
     const cleanedTracking = this.metricsLogger.cleanupOldOrders(0);
-    console.log(`Cleaned up ${cleanedTracking} tracked orders`);
+    this.log(`Cleaned up ${cleanedTracking} tracked orders`);
 
     this.shutdown();
   }

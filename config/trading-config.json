@@ -5,7 +5,7 @@
     "timezone": "Asia/Kolkata"
   },
   "rateLimit": {
-    "ordersPerSecond": 100
+    "ordersPerSecond": 10
   },
   "credentials": {
     "username": "trader_001",
